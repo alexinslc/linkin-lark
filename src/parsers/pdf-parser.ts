@@ -27,12 +27,13 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
   }
 
   // Check file size before loading into memory
-  const maxSize = 100 * 1024 * 1024; // 100MB
+  const maxSize = 100 * 1024 * 1024; // 100 MiB
   const fileSize = file.size;
 
   if (fileSize > maxSize) {
-    const sizeMB = (fileSize / 1024 / 1024).toFixed(2);
-    throw new Error(`PDF too large: ${sizeMB}MB (max: 100MB). Consider splitting the file into smaller parts.`);
+    const sizeMiB = (fileSize / 1024 / 1024).toFixed(2);
+    const maxSizeMiB = (maxSize / 1024 / 1024).toFixed(2);
+    throw new Error(`PDF too large: ${sizeMiB} MiB (max: ${maxSizeMiB} MiB). Consider splitting the file into smaller parts.`);
   }
 
   // Verify it's actually a PDF by magic bytes
