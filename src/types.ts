@@ -11,6 +11,7 @@ export interface ConvertOptions {
   format?: 'text' | 'json';
   resume?: boolean;
   force?: boolean;
+  yes?: boolean;
 }
 
 export interface TTSOptions {

@@ -20,6 +20,7 @@ program
   .option('-f, --format <type>', 'Output format: text (default) or json', 'text')
   .option('--resume', 'Resume from previous state')
   .option('--force', 'Ignore previous state and start fresh')
+  .option('-y, --yes', 'Confirm conversion cost and proceed automatically')
   .action(convertCommand);
 
 program.parse();

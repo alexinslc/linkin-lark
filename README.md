@@ -73,6 +73,9 @@ bun run src/cli.ts convert book.pdf --bitrate 192
 
 # Configure pages per chapter for PDFs without TOC
 bun run src/cli.ts convert book.pdf --pages-per-chapter 15
+
+# Skip cost confirmation prompt (for automation/CI)
+bun run src/cli.ts convert book.pdf --yes
 ```
 
 #### Dry Run (Preview Only)
@@ -81,6 +84,29 @@ bun run src/cli.ts convert book.pdf --pages-per-chapter 15
 # See chapter structure and cost estimate without converting
 bun run src/cli.ts convert https://basecamp.com/shapeup --dry-run
 ```
+
+#### Cost Confirmation
+
+By default, linkin-lark shows the estimated cost and requires confirmation before conversion:
+
+```bash
+# Normal mode - shows cost and requires --yes flag
+bun run src/cli.ts convert https://basecamp.com/shapeup
+
+# Output:
+# 💰 Cost Estimate:
+#   Chapters: 14
+#   Characters: 145,230
+#   Estimated cost: $4.36 (approximate)
+#
+# ⚠  To proceed with conversion, add the --yes flag:
+#    linkin-lark convert "https://basecamp.com/shapeup" --yes
+
+# Auto-confirm and proceed with conversion
+bun run src/cli.ts convert https://basecamp.com/shapeup --yes
+```
+
+**Note:** JSON mode (`--format json`) and dry-run mode automatically skip confirmation for automation compatibility.
 
 #### JSON Output Mode
 
@@ -249,7 +275,19 @@ ElevenLabs pricing (as of 2026):
 
 Average book: ~200k characters ≈ $0.15-0.50 depending on tier.
 
-Use `--dry-run` to see exact character count and cost estimate before converting.
+**Cost preview:** Normal conversions automatically display cost estimates and require `--yes` flag to proceed. Use `--dry-run` to preview costs without confirmation prompts.
+
+```bash
+# Preview cost (no confirmation needed)
+bun run src/cli.ts convert book.pdf --dry-run
+
+# Normal conversion (requires --yes after seeing cost)
+bun run src/cli.ts convert book.pdf
+# Shows cost estimate, then exits with instructions
+
+# Confirm and proceed
+bun run src/cli.ts convert book.pdf --yes
+```
 
 ## Troubleshooting
 

@@ -51,6 +51,27 @@ function getRequestsPerSecond(): number {
 const CONCURRENT_REQUESTS = getConcurrentRequests();
 const REQUESTS_PER_SECOND = getRequestsPerSecond();
 
+function displayCostSummary(
+  chaptersCount: number,
+  totalChars: number,
+  estimatedCost: number,
+  mode: 'normal' | 'resume' = 'normal',
+  completedChapters?: number
+): void {
+  console.log('\n💰 Cost Estimate:');
+  console.log(`  Chapters: ${chaptersCount}`);
+
+  if (mode === 'resume' && completedChapters !== undefined) {
+    const remainingChapters = chaptersCount - completedChapters;
+    console.log(`  Completed: ${completedChapters}`);
+    console.log(`  Remaining: ${remainingChapters}`);
+  }
+
+  console.log(`  Characters: ${totalChars.toLocaleString()}`);
+  console.log(`  Estimated cost: $${estimatedCost.toFixed(2)} (approximate)`);
+  console.log('  Note: Actual cost may vary based on your ElevenLabs plan\n');
+}
+
 export async function convertCommand(
   input: string,
   options: ConvertOptions
@@ -66,6 +87,48 @@ export async function convertCommand(
     const estimatedCost = (totalChars / 1000000) * 30;
 
     if (spinner) spinner.succeed(`Found ${result.chapters.length} chapters in ${result.type.toUpperCase()}`);
+
+    // Calculate cost for display (handles resume mode)
+    let displayChars = totalChars;
+    let displayCost = estimatedCost;
+    let displayMode: 'normal' | 'resume' = 'normal';
+    let completedCount = 0;
+
+    // Load state early to calculate remaining cost for resume mode
+    if (!options.force && !options.dryRun) {
+      const stateManager = new StateManager();
+      const state = await stateManager.load(options.output);
+
+      if (state && state.source === input && state.totalChapters === result.chapters.length) {
+        // Calculate remaining cost
+        const remainingChapters = result.chapters.filter((_, i) =>
+          !state.completedChapters.includes(i)
+        );
+        displayChars = remainingChapters.reduce((sum, ch) => sum + ch.content.length, 0);
+        displayCost = (displayChars / 1000000) * 30;
+        completedCount = state.completedChapters.length;
+        displayMode = 'resume';
+      }
+    }
+
+    // Display cost summary (skip in JSON mode - cost is in result)
+    if (!isJsonMode && !options.dryRun) {
+      displayCostSummary(result.chapters.length, displayChars, displayCost, displayMode, completedCount);
+    }
+
+    // Check if confirmation needed
+    // JSON mode auto-confirms, dry-run doesn't need confirmation
+    const needsConfirmation = !options.yes && !options.dryRun && !isJsonMode;
+
+    if (needsConfirmation) {
+      console.log('⚠  To proceed with conversion, add the --yes flag:');
+      console.log(`   linkin-lark convert "${input}" --yes`);
+      if (displayMode === 'resume') {
+        console.log(`   Or with resume: linkin-lark convert "${input}" --resume --yes`);
+      }
+      console.log('\n💡 Tip: Use --dry-run to preview without converting\n');
+      return; // Graceful exit, exit code 0
+    }
 
     if (options.dryRun) {
       if (isJsonMode) {
