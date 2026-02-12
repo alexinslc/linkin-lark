@@ -7,7 +7,7 @@ type OutlineNode = {
   bold?: boolean;
   italic?: boolean;
   color?: Uint8ClampedArray;
-  dest: string | Array<any> | null;
+  dest: string | unknown[] | null;
   url?: string | null;
   unsafeUrl?: string;
   newWindow?: boolean;
@@ -86,7 +86,7 @@ async function detectPDFChapters(
   return chapters;
 }
 
-async function getPageNumber(pdfDocument: PDFDocumentProxy, dest: string | Array<any> | null): Promise<number> {
+async function getPageNumber(pdfDocument: PDFDocumentProxy, dest: string | readonly unknown[] | null): Promise<number> {
   try {
     if (typeof dest === 'string') {
       const match = dest.match(/p(\d+)/);
