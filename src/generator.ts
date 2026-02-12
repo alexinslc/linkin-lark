@@ -1,4 +1,6 @@
+import * as path from 'path';
 import type { GeneratorOptions } from './types';
+import { sanitizeOutputPath, validatePathWithinDirectory } from './validators/path-validator';
 
 export async function saveMp3File(
   audio: ArrayBuffer,
@@ -6,8 +8,14 @@ export async function saveMp3File(
   totalChapters: number,
   options: GeneratorOptions
 ): Promise<string> {
+  // Validate and sanitize output directory
+  const sanitizedDir = sanitizeOutputPath(options.outputDir);
+
   const fileName = generateFileName(chapterIndex, totalChapters);
-  const filePath = `${options.outputDir}/${fileName}`;
+  const filePath = path.join(sanitizedDir, fileName);
+
+  // Ensure resolved path is still within intended directory
+  validatePathWithinDirectory(filePath, sanitizedDir);
 
   await Bun.write(filePath, audio);
 

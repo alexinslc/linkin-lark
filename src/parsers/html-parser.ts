@@ -14,13 +14,58 @@ export async function parseHTML(url: string): Promise<ParserResult> {
 }
 
 async function fetchHTML(url: string): Promise<string> {
-  const response = await fetch(url);
+  // Validate URL and block SSRF
+  const parsedUrl = new URL(url);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+  // Whitelist protocols
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new Error(`Unsupported protocol: ${parsedUrl.protocol}`);
   }
 
-  return response.text();
+  // Block private IP ranges and internal hosts
+  const hostname = parsedUrl.hostname;
+  const blockedPatterns = [
+    /^localhost$/i,
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+    /^192\.168\./,
+    /^169\.254\./,  // AWS metadata
+    /^0\./,
+    /^\[::/,        // IPv6 localhost
+    /^fc00:/,       // IPv6 private
+  ];
+
+  if (blockedPatterns.some(pattern => pattern.test(hostname))) {
+    throw new Error(`Access to private/internal hosts not allowed: ${hostname}`);
+  }
+
+  // Add timeout and size limit
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: 'manual'  // Don't follow redirects automatically
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+    }
+
+    // Check content length
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 50 * 1024 * 1024) {
+      throw new Error('Content too large (max 50MB)');
+    }
+
+    return response.text();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function detectHTMLChapters(html: string): Chapter[] {
