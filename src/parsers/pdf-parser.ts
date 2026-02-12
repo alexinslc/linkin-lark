@@ -26,6 +26,16 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
     throw new Error(`PDF file not found: ${sanitizedPath}`);
   }
 
+  // Check file size before loading into memory
+  const maxSize = 100 * 1024 * 1024; // 100 MiB
+  const fileSize = file.size;
+
+  if (fileSize > maxSize) {
+    const sizeMiB = (fileSize / 1024 / 1024).toFixed(2);
+    const maxSizeMiB = (maxSize / 1024 / 1024).toFixed(2);
+    throw new Error(`PDF too large: ${sizeMiB} MiB (max: ${maxSizeMiB} MiB). Consider splitting the file into smaller parts.`);
+  }
+
   // Verify it's actually a PDF by magic bytes
   const dataBuffer = await file.arrayBuffer();
   const uint8Array = new Uint8Array(dataBuffer);
