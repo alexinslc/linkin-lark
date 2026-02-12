@@ -1,6 +1,5 @@
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Chapter, ParserResult } from '../types';
-
-const pdfParse = require('pdf-parse');
 
 export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): Promise<ParserResult> {
   const file = Bun.file(pdfPath);
@@ -10,9 +9,15 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
   }
 
   const dataBuffer = await file.arrayBuffer();
-  const data = await pdfParse(Buffer.from(dataBuffer));
+  const uint8Array = new Uint8Array(dataBuffer);
 
-  const chapters = await detectPDFChapters(data, pagesPerChapter);
+  const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+  const pdfDocument = await loadingTask.promise;
+
+  const outline = await pdfDocument.getOutline();
+  const numPages = pdfDocument.numPages;
+
+  const chapters = await detectPDFChapters(pdfDocument, outline, numPages, pagesPerChapter);
 
   return {
     chapters,
@@ -21,20 +26,28 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
   };
 }
 
-async function detectPDFChapters(data: any, pagesPerChapter: number): Promise<Chapter[]> {
+async function detectPDFChapters(
+  pdfDocument: any,
+  outline: any,
+  numPages: number,
+  pagesPerChapter: number
+): Promise<Chapter[]> {
   const chapters: Chapter[] = [];
 
-  if (data.metadata?.outline && Array.isArray(data.metadata.outline) && data.metadata.outline.length > 0) {
-    const outline = data.metadata.outline;
-
+  if (outline && outline.length > 0) {
     for (let i = 0; i < outline.length; i++) {
       const item = outline[i];
       const nextItem = outline[i + 1];
 
-      if (item?.title) {
+      if (item.title) {
+        const startPage = item.dest ? await getPageNumber(pdfDocument, item.dest) : 1;
+        const endPage = nextItem?.dest ? await getPageNumber(pdfDocument, nextItem.dest) - 1 : numPages;
+
+        const content = await extractTextFromPages(pdfDocument, startPage, endPage);
+
         chapters.push({
           title: item.title,
-          content: data.text,
+          content,
           index: i
         });
       }
@@ -42,26 +55,63 @@ async function detectPDFChapters(data: any, pagesPerChapter: number): Promise<Ch
   }
 
   if (chapters.length === 0) {
-    const totalPages = data.numpages;
-    const text = data.text;
-    const wordsPerPage = Math.ceil(text.split(/\s+/).length / totalPages);
-    const words = text.split(/\s+/);
-
-    for (let i = 0; i < totalPages; i += pagesPerChapter) {
+    for (let i = 0; i < numPages; i += pagesPerChapter) {
       const startPage = i + 1;
-      const endPage = Math.min(i + pagesPerChapter, totalPages);
-      const startWordIdx = i * wordsPerPage;
-      const endWordIdx = Math.min(endPage * wordsPerPage, words.length);
+      const endPage = Math.min(i + pagesPerChapter, numPages);
 
-      const chapterContent = words.slice(startWordIdx, endWordIdx).join(' ');
+      const content = await extractTextFromPages(pdfDocument, startPage, endPage);
 
       chapters.push({
         title: `Pages ${startPage}-${endPage}`,
-        content: chapterContent,
+        content,
         index: Math.floor(i / pagesPerChapter)
       });
     }
   }
 
   return chapters;
+}
+
+async function getPageNumber(pdfDocument: any, dest: any): Promise<number> {
+  try {
+    if (typeof dest === 'string') {
+      const match = dest.match(/p(\d+)/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+    }
+
+    if (Array.isArray(dest)) {
+      const pageRef = dest[0];
+      const pageIndex = await pdfDocument.getPageIndex(pageRef);
+      return pageIndex + 1;
+    }
+
+    if (typeof dest === 'string') {
+      const resolvedDest = await pdfDocument.getDestination(dest);
+      if (resolvedDest && Array.isArray(resolvedDest)) {
+        const pageRef = resolvedDest[0];
+        const pageIndex = await pdfDocument.getPageIndex(pageRef);
+        return pageIndex + 1;
+      }
+    }
+
+    return 1;
+  } catch {
+    return 1;
+  }
+}
+
+async function extractTextFromPages(pdfDocument: any, startPage: number, endPage: number): Promise<string> {
+  const textParts: string[] = [];
+
+  for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+    const page = await pdfDocument.getPage(pageNum);
+    const textContent = await page.getTextContent();
+
+    const pageText = textContent.items.map((item: any) => item.str).join(' ');
+    textParts.push(pageText);
+  }
+
+  return textParts.join(' ').replace(/\s+/g, ' ').trim();
 }
