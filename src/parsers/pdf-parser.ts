@@ -1,5 +1,19 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { Chapter, ParserResult } from '../types';
+
+type OutlineNode = {
+  title: string;
+  bold?: boolean;
+  italic?: boolean;
+  color?: Uint8ClampedArray;
+  dest: string | Array<any> | null;
+  url?: string | null;
+  unsafeUrl?: string;
+  newWindow?: boolean;
+  count?: number;
+  items?: Array<OutlineNode>;
+};
 
 export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): Promise<ParserResult> {
   const file = Bun.file(pdfPath);
@@ -27,8 +41,8 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
 }
 
 async function detectPDFChapters(
-  pdfDocument: any,
-  outline: any,
+  pdfDocument: PDFDocumentProxy,
+  outline: Array<OutlineNode> | null,
   numPages: number,
   pagesPerChapter: number
 ): Promise<Chapter[]> {
@@ -37,6 +51,8 @@ async function detectPDFChapters(
   if (outline && outline.length > 0) {
     for (let i = 0; i < outline.length; i++) {
       const item = outline[i];
+      if (!item) continue;
+
       const nextItem = outline[i + 1];
 
       if (item.title) {
@@ -70,7 +86,7 @@ async function detectPDFChapters(
   return chapters;
 }
 
-async function getPageNumber(pdfDocument: any, dest: any): Promise<number> {
+async function getPageNumber(pdfDocument: PDFDocumentProxy, dest: string | Array<any> | null): Promise<number> {
   try {
     if (typeof dest === 'string') {
       const match = dest.match(/p(\d+)/);
@@ -100,14 +116,16 @@ async function getPageNumber(pdfDocument: any, dest: any): Promise<number> {
   }
 }
 
-async function extractTextFromPages(pdfDocument: any, startPage: number, endPage: number): Promise<string> {
+async function extractTextFromPages(pdfDocument: PDFDocumentProxy, startPage: number, endPage: number): Promise<string> {
   const textParts: string[] = [];
 
   for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
     const page = await pdfDocument.getPage(pageNum);
     const textContent = await page.getTextContent();
 
-    const pageText = textContent.items.map((item: any) => item.str).join(' ');
+    const pageText = textContent.items
+      .map((item) => ('str' in item ? item.str : ''))
+      .join(' ');
     textParts.push(pageText);
   }
 
