@@ -91,20 +91,20 @@ function detectHTMLChapters(html: string): Chapter[] {
   if (chapters.length < 5) {
     const mainContent = $('main, article, .content').first();
     const content = mainContent.length ? mainContent.html() || '' : $('body').html() || '';
-    const cleanedContent = cleanHTMLContent($, content);
+    const cleanedContent = cleanHTMLContent(content);
 
     return [{ title: 'Full Book', content: cleanedContent }];
   }
 
   return chapters.map(ch => ({
     ...ch,
-    content: cleanHTMLContent($, ch.content)
+    content: cleanHTMLContent(ch.content)
   }));
 }
 
 function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element): string {
   const $el = $(element);
-  const tagName = element.tagName;
+  const tagName = 'tagName' in element ? element.tagName : 'div';
   let content = '';
 
   $el.nextUntil(`${tagName}, h1, h2`).each((_, nextEl) => {
@@ -114,7 +114,7 @@ function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element
   return content;
 }
 
-function cleanHTMLContent($: cheerio.CheerioAPI, html: string): string {
+function cleanHTMLContent(html: string): string {
   const $content = cheerio.load(html);
 
   $content('a[href^="#"]').remove();
