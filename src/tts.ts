@@ -15,12 +15,20 @@ export async function convertToSpeech(
   const chunks = splitTextIntoChunks(text, MAX_CHARS);
   const audioBuffers: ArrayBuffer[] = [];
 
-  for (const chunk of chunks) {
-    const response = await convertSingleChunk(chunk, options);
-    audioBuffers.push(response.audio);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (!chunk) continue;
+
+    try {
+      const response = await convertSingleChunk(chunk, options);
+      audioBuffers.push(response.audio);
+    } catch (error) {
+      throw new Error(`Failed to convert chunk ${i + 1}/${chunks.length}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
-  // Concatenate MP3 buffers
+  // Concatenate MP3 buffers (simple byte concatenation - works for MP3 format)
+  // Note: This approach works because MP3 frames are self-contained
   const totalLength = audioBuffers.reduce((sum, buf) => sum + buf.byteLength, 0);
   const combined = new Uint8Array(totalLength);
   let offset = 0;
@@ -43,14 +51,22 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
   while (start < text.length) {
     let end = start + maxChars;
 
-    // Smart boundary detection (prefer sentence/paragraph breaks)
+    // Find optimal split point: prefer paragraph breaks, then sentence breaks
+    // Searches forward up to 500 chars to find natural boundaries
     if (end < text.length) {
-      const searchEnd = Math.min(end + 100, text.length);
+      const searchEnd = Math.min(end + 500, text.length);
       const slice = text.substring(start, searchEnd);
 
-      const sentenceEnd = slice.lastIndexOf('. ');
+      // Use regex to find sentence boundaries (period followed by space)
+      let sentenceEnd = -1;
+      const regex = /\.\s/g;
+      let match;
+      while ((match = regex.exec(slice)) !== null) {
+        sentenceEnd = match.index + 1;
+      }
       const paragraphEnd = slice.lastIndexOf('\n\n');
 
+      // Prefer boundaries closest to the limit, within tolerance range
       if (paragraphEnd > maxChars - 500) {
         end = start + paragraphEnd;
       } else if (sentenceEnd > maxChars - 200) {
@@ -58,7 +74,18 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       }
     }
 
-    chunks.push(text.substring(start, end).trim());
+    const chunk = text.substring(start, end);
+
+    // Only trim first chunk's start and last chunk's end to preserve internal whitespace
+    const trimmedChunk = start === 0
+      ? chunk.trimStart()
+      : (end >= text.length ? chunk.trimEnd() : chunk);
+
+    // Validate non-empty chunks
+    if (trimmedChunk.length > 0) {
+      chunks.push(trimmedChunk);
+    }
+
     start = end;
   }
 
