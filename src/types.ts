@@ -13,6 +13,7 @@ export interface ConvertOptions {
 export interface TTSOptions {
   apiKey: string;
   voiceId: string;
+  modelId?: string;
 }
 
 export interface ParserResult {
