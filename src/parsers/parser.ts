@@ -2,11 +2,11 @@ import type { ParserResult } from '../types';
 import { parseHTML } from './html-parser';
 import { parsePDF } from './pdf-parser';
 
-export async function parseInput(input: string): Promise<ParserResult> {
+export async function parseInput(input: string, pagesPerChapter?: number): Promise<ParserResult> {
   if (isURL(input)) {
     return await parseHTML(input);
   } else if (await isPDFFile(input)) {
-    return await parsePDF(input);
+    return await parsePDF(input, pagesPerChapter);
   } else {
     throw new Error(`Invalid input: ${input}. Must be a URL or PDF file path.`);
   }
