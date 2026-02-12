@@ -44,3 +44,6 @@ CLAUDE.md
 
 # Output files from conversions
 output/
+
+# State files for resume capability
+.linkin-lark-state.json

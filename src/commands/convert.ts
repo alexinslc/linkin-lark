@@ -4,6 +4,7 @@ import { parseInput } from '../parsers/parser';
 import { convertToSpeech, getApiKey, getDefaultVoiceId } from '../tts';
 import { saveMp3File, ensureOutputDir } from '../generator';
 import type { ConvertOptions } from '../types';
+import { StateManager, type ConversionState } from '../services/state-manager';
 
 config();
 
@@ -38,11 +39,44 @@ export async function convertCommand(
 
     await ensureOutputDir(options.output);
 
-    const failed: string[] = [];
+    const stateManager = new StateManager();
+    let state: ConversionState | null = null;
+
+    if (!options.force) {
+      state = await stateManager.load(options.output);
+
+      if (state && !options.resume) {
+        console.log(`\nFound previous conversion state (${state.completedChapters.length}/${state.totalChapters} chapters completed)`);
+        console.log('Use --resume to continue or --force to start fresh\n');
+        process.exit(0);
+      }
+
+      if (state && options.resume) {
+        console.log(`\nResuming conversion (${state.completedChapters.length}/${state.totalChapters} chapters already completed)\n`);
+      }
+    }
+
+    if (!state) {
+      state = {
+        source: input,
+        completedChapters: [],
+        failedChapters: [],
+        timestamp: new Date().toISOString(),
+        totalChapters: result.chapters.length
+      };
+      await stateManager.save(state, options.output);
+    }
 
     for (let i = 0; i < result.chapters.length; i++) {
       const chapter = result.chapters[i];
+      if (!chapter) continue;
+
       const progress = `${i + 1}/${result.chapters.length}`;
+
+      if (stateManager.shouldSkipChapter(i, state)) {
+        console.log(`Skipping already completed chapter ${progress}: ${chapter.title}`);
+        continue;
+      }
 
       try {
         spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
@@ -60,20 +94,34 @@ export async function convertCommand(
           { outputDir: options.output }
         );
 
+        state.completedChapters.push(i);
+        await stateManager.save(state, options.output);
+
         spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
       } catch (error) {
         spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`  Error: ${errorMsg}`);
-        failed.push(chapter.title);
+
+        state.failedChapters.push({
+          index: i,
+          title: chapter.title,
+          error: errorMsg
+        });
+        await stateManager.save(state, options.output);
       }
     }
 
-    if (failed.length === 0) {
+    const totalCompleted = state.completedChapters.length;
+    const totalFailed = state.failedChapters.length;
+
+    if (totalFailed === 0) {
       console.log(`\n✓ Successfully converted all ${result.chapters.length} chapters to ${options.output}`);
+      await stateManager.clear(options.output);
     } else {
-      console.log(`\n⚠ Converted ${result.chapters.length - failed.length}/${result.chapters.length} chapters`);
-      console.log('Failed chapters:', failed.join(', '));
+      console.log(`\n⚠ Converted ${totalCompleted}/${result.chapters.length} chapters`);
+      console.log('Failed chapters:', state.failedChapters.map(f => f.title).join(', '));
+      console.log('\nUse --resume to retry failed chapters');
     }
 
   } catch (error) {

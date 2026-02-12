@@ -8,6 +8,8 @@ export interface ConvertOptions {
   voice?: string;
   pagesPerChapter?: number;
   dryRun?: boolean;
+  resume?: boolean;
+  force?: boolean;
 }
 
 export interface TTSOptions {
