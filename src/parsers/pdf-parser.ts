@@ -1,5 +1,6 @@
-import pdfParse from 'pdf-parse';
 import type { Chapter, ParserResult } from '../types';
+
+const pdfParse = require('pdf-parse');
 
 export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): Promise<ParserResult> {
   const file = Bun.file(pdfPath);
@@ -20,7 +21,7 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
   };
 }
 
-async function detectPDFChapters(data: pdfParse.Result, pagesPerChapter: number): Promise<Chapter[]> {
+async function detectPDFChapters(data: any, pagesPerChapter: number): Promise<Chapter[]> {
   const chapters: Chapter[] = [];
 
   if (data.metadata?.outline && Array.isArray(data.metadata.outline) && data.metadata.outline.length > 0) {
