@@ -1,11 +1,14 @@
 import ora from 'ora';
 import { config } from 'dotenv';
+import PQueue from 'p-queue';
 import { parseInput } from '../parsers/parser';
 import { convertToSpeech, getApiKey, getDefaultVoiceId } from '../tts';
 import { saveMp3File, ensureOutputDir } from '../generator';
 import type { ConvertOptions } from '../types';
 
 config();
+
+const CONCURRENT_REQUESTS = 5;
 
 export async function convertCommand(
   input: string,
@@ -38,36 +41,43 @@ export async function convertCommand(
 
     await ensureOutputDir(options.output);
 
+    const queue = new PQueue({ concurrency: CONCURRENT_REQUESTS });
     const failed: string[] = [];
+    let completed = 0;
 
-    for (let i = 0; i < result.chapters.length; i++) {
-      const chapter = result.chapters[i];
-      const progress = `${i + 1}/${result.chapters.length}`;
+    const tasks = result.chapters.map((chapter, i) =>
+      queue.add(async () => {
+        const progress = `${i + 1}/${result.chapters.length}`;
 
-      try {
-        spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
+        try {
+          spinner.start(`Converting chapter ${progress}: ${chapter.title} (queued: ${queue.size}, active: ${queue.pending})`);
 
-        const ttsResponse = await convertToSpeech(chapter.content, {
-          apiKey,
-          voiceId,
-          modelId: 'eleven_flash_v2_5'
-        });
+          const ttsResponse = await convertToSpeech(chapter.content, {
+            apiKey,
+            voiceId,
+            modelId: 'eleven_flash_v2_5'
+          });
 
-        const filePath = await saveMp3File(
-          ttsResponse.audio,
-          i,
-          result.chapters.length,
-          { outputDir: options.output }
-        );
+          const filePath = await saveMp3File(
+            ttsResponse.audio,
+            i,
+            result.chapters.length,
+            { outputDir: options.output }
+          );
 
-        spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
-      } catch (error) {
-        spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`  Error: ${errorMsg}`);
-        failed.push(chapter.title);
-      }
-    }
+          completed++;
+          spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
+        } catch (error) {
+          completed++;
+          spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error(`  Error: ${errorMsg}`);
+          failed.push(chapter.title);
+        }
+      })
+    );
+
+    await Promise.all(tasks);
 
     if (failed.length === 0) {
       console.log(`\n✓ Successfully converted all ${result.chapters.length} chapters to ${options.output}`);
