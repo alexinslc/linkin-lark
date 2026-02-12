@@ -67,11 +67,17 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       const paragraphEnd = slice.lastIndexOf('\n\n');
 
       // Prefer boundaries closest to the limit, within tolerance range
-      if (paragraphEnd > maxChars - 500) {
+      // Ensure end always advances to prevent infinite loops
+      if (paragraphEnd > maxChars - 500 && paragraphEnd > 0) {
         end = start + paragraphEnd;
       } else if (sentenceEnd > maxChars - 200) {
         end = start + sentenceEnd + 1;
       }
+    }
+
+    // Ensure end always advances
+    if (end <= start) {
+      end = start + maxChars;
     }
 
     const chunk = text.substring(start, end);
@@ -81,8 +87,8 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       ? chunk.trimStart()
       : (end >= text.length ? chunk.trimEnd() : chunk);
 
-    // Validate non-empty chunks
-    if (trimmedChunk.length > 0) {
+    // Validate non-whitespace chunks
+    if (trimmedChunk.trim().length > 0) {
       chunks.push(trimmedChunk);
     }
 

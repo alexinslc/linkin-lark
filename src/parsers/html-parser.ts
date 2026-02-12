@@ -1,6 +1,5 @@
 import * as cheerio from 'cheerio';
 import type { Chapter, ParserResult } from '../types';
-import { cleanHTMLContent } from '../cleaner';
 
 export async function parseHTML(url: string): Promise<ParserResult> {
   const html = await fetchHTML(url);
@@ -109,7 +108,7 @@ function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element
   }
 
   const $el = $(element);
-  const tagName = element.tagName;
+  const tagName = 'tagName' in element ? element.tagName : 'div';
   let content = '';
 
   $el.nextUntil(`${tagName}, h1, h2`).each((_, nextEl) => {
@@ -117,4 +116,20 @@ function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element
   });
 
   return content;
+}
+
+function cleanHTMLContent(html: string): string {
+  const $content = cheerio.load(html);
+
+  $content('a[href^="#"]').remove();
+
+  $content('*').contents().filter(function() {
+    return this.type === 'comment';
+  }).remove();
+
+  let text = $content('body').text();
+
+  text = text.replace(/\s+/g, ' ').trim();
+
+  return text;
 }
