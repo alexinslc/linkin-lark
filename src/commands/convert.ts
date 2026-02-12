@@ -15,11 +15,8 @@ export async function convertCommand(
   const spinner = isJsonMode ? null : ora('Initializing...').start();
 
   try {
-    const apiKey = getApiKey();
-    const voiceId = options.voice || getDefaultVoiceId();
-
     if (spinner) spinner.text = 'Parsing input...';
-    const result = await parseInput(input);
+    const result = await parseInput(input, options.pagesPerChapter);
 
     const totalChars = result.chapters.reduce((sum, ch) => sum + ch.content.length, 0);
     const estimatedCost = (totalChars / 1000000) * 30;
@@ -55,6 +52,10 @@ export async function convertCommand(
       return;
     }
 
+    // Only get API key/voice after dry-run check
+    const apiKey = getApiKey();
+    const voiceId = options.voice || getDefaultVoiceId();
+
     await ensureOutputDir(options.output);
 
     const conversionResult: ConversionResult = {
@@ -68,10 +69,7 @@ export async function convertCommand(
       type: result.type
     };
 
-    for (let i = 0; i < result.chapters.length; i++) {
-      const chapter = result.chapters[i];
-      if (!chapter) continue;
-
+    for (const [i, chapter] of result.chapters.entries()) {
       const progress = `${i + 1}/${result.chapters.length}`;
 
       try {
@@ -132,7 +130,17 @@ export async function convertCommand(
     const errorMsg = error instanceof Error ? error.message : String(error);
 
     if (isJsonMode) {
-      console.log(JSON.stringify({ success: false, error: errorMsg }, null, 2));
+      const errorResult: ConversionResult = {
+        success: false,
+        chapters: [],
+        totalChapters: 0,
+        totalCharacters: 0,
+        estimatedCost: 0,
+        outputDir: options.output,
+        source: input,
+        type: 'html' // Default type, error occurred before type detection
+      };
+      console.log(JSON.stringify(errorResult, null, 2));
     } else {
       console.error(`\nError: ${errorMsg}`);
     }

@@ -103,7 +103,11 @@ function detectHTMLChapters(html: string): Chapter[] {
   }));
 }
 
-function extractContentUntilNext($: cheerio.CheerioAPI, element: any): string {
+function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element): string {
+  if (element.type !== 'tag' || !element.tagName) {
+    return '';
+  }
+
   const $el = $(element);
   const tagName = element.tagName;
   let content = '';

@@ -1,11 +1,14 @@
-import {
+import type {
   Chapter,
   ConvertOptions,
   TTSOptions,
   ParserResult,
   TTSResponse,
   GeneratorOptions,
-  ConversionResult,
+  ConversionResult
+} from './src/index';
+
+import {
   parseInput,
   convertToSpeech,
   getApiKey,
@@ -15,6 +18,25 @@ import {
   ensureOutputDir,
   cleanHTMLContent
 } from './src/index';
+
+// Dummy usages to ensure all imports are exercised for static analysis
+type _TestTypes =
+  | Chapter
+  | ConvertOptions
+  | TTSOptions
+  | ParserResult
+  | TTSResponse
+  | GeneratorOptions
+  | ConversionResult;
+
+void parseInput;
+void convertToSpeech;
+void getApiKey;
+void getDefaultVoiceId;
+void saveMp3File;
+void generateFileName;
+void ensureOutputDir;
+void cleanHTMLContent;
 
 console.log('All exports loaded successfully!');
 console.log('Available functions:');
