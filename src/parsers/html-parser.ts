@@ -1,6 +1,5 @@
 import * as cheerio from 'cheerio';
 import type { Chapter, ParserResult } from '../types';
-import { cleanHTMLContent } from '../cleaner';
 
 export async function parseHTML(url: string): Promise<ParserResult> {
   const html = await fetchHTML(url);
@@ -92,14 +91,14 @@ function detectHTMLChapters(html: string): Chapter[] {
   if (chapters.length < 5) {
     const mainContent = $('main, article, .content').first();
     const content = mainContent.length ? mainContent.html() || '' : $('body').html() || '';
-    const cleanedContent = cleanHTMLContent(content);
+    const cleanedContent = cleanHTMLContent($, content);
 
     return [{ title: 'Full Book', content: cleanedContent }];
   }
 
   return chapters.map(ch => ({
     ...ch,
-    content: cleanHTMLContent(ch.content)
+    content: cleanHTMLContent($, ch.content)
   }));
 }
 
@@ -113,4 +112,20 @@ function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element
   });
 
   return content;
+}
+
+function cleanHTMLContent($: cheerio.CheerioAPI, html: string): string {
+  const $content = cheerio.load(html);
+
+  $content('a[href^="#"]').remove();
+
+  $content('*').contents().filter(function() {
+    return this.type === 'comment';
+  }).remove();
+
+  let text = $content('body').text();
+
+  text = text.replace(/\s+/g, ' ').trim();
+
+  return text;
 }
