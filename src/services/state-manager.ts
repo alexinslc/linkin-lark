@@ -6,9 +6,14 @@ export interface ConversionState {
   totalChapters: number;
 }
 
+import * as path from 'path';
+import { unlink } from 'fs/promises';
+
 export class StateManager {
   private getStatePath(outputDir: string): string {
-    return `${outputDir}/.linkin-lark-state.json`;
+    // Use path.join for proper path construction across platforms
+    const normalizedDir = path.resolve(outputDir);
+    return path.join(normalizedDir, '.linkin-lark-state.json');
   }
 
   async save(state: ConversionState, outputDir: string): Promise<void> {
@@ -46,7 +51,7 @@ export class StateManager {
   async clear(outputDir: string): Promise<void> {
     const statePath = this.getStatePath(outputDir);
     try {
-      await Bun.write(statePath, '');
+      await unlink(statePath);
     } catch {
       // Ignore if file doesn't exist
     }
@@ -57,13 +62,43 @@ export class StateManager {
 
     const s = state as Record<string, unknown>;
 
-    return (
-      typeof s.source === 'string' &&
-      Array.isArray(s.completedChapters) &&
-      s.completedChapters.every((n: unknown) => typeof n === 'number') &&
-      Array.isArray(s.failedChapters) &&
-      typeof s.timestamp === 'string' &&
-      typeof s.totalChapters === 'number'
-    );
+    // Validate basic structure
+    if (
+      typeof s.source !== 'string' ||
+      !Array.isArray(s.completedChapters) ||
+      !Array.isArray(s.failedChapters) ||
+      typeof s.timestamp !== 'string' ||
+      typeof s.totalChapters !== 'number'
+    ) {
+      return false;
+    }
+
+    // Validate completedChapters array
+    if (!s.completedChapters.every((n: unknown) => typeof n === 'number')) {
+      return false;
+    }
+
+    // Validate failedChapters array structure
+    const totalChapters = s.totalChapters as number;
+    return (s.failedChapters as unknown[]).every((f: unknown) => {
+      if (typeof f !== 'object' || f === null) return false;
+      const item = f as Record<string, unknown>;
+
+      const index = item.index;
+      const title = item.title;
+      const error = item.error;
+
+      const validIndex =
+        typeof index === 'number' &&
+        Number.isInteger(index) &&
+        index >= 0 &&
+        index < totalChapters;
+
+      return (
+        validIndex &&
+        typeof title === 'string' &&
+        typeof error === 'string'
+      );
+    });
   }
 }

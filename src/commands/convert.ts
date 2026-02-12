@@ -45,10 +45,23 @@ export async function convertCommand(
     if (!options.force) {
       state = await stateManager.load(options.output);
 
+      // Validate that state matches current run
+      if (state) {
+        if (state.source !== input || state.totalChapters !== result.chapters.length) {
+          console.warn('\nWarning: Existing state file does not match current input.');
+          console.warn(`  State source: ${state.source}`);
+          console.warn(`  Current input: ${input}`);
+          console.warn(`  State chapters: ${state.totalChapters}, Current: ${result.chapters.length}`);
+          console.warn('Ignoring state. Use --force to explicitly start fresh.\n');
+          state = null;
+        }
+      }
+
       if (state && !options.resume) {
         console.log(`\nFound previous conversion state (${state.completedChapters.length}/${state.totalChapters} chapters completed)`);
         console.log('Use --resume to continue or --force to start fresh\n');
-        process.exit(0);
+        spinner.stop();
+        return;
       }
 
       if (state && options.resume) {
@@ -95,6 +108,10 @@ export async function convertCommand(
         );
 
         state.completedChapters.push(i);
+
+        // Remove from failedChapters if it was previously failed (retry success)
+        state.failedChapters = state.failedChapters.filter(f => f.index !== i);
+
         await stateManager.save(state, options.output);
 
         spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
