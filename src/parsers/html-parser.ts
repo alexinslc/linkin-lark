@@ -25,6 +25,11 @@ async function fetchHTML(url: string): Promise<string> {
 
 function detectHTMLChapters(html: string): Chapter[] {
   const $ = cheerio.load(html);
+
+  $('script, style, nav, header, footer, .ad, [class*="ad-"]').remove();
+  $('[class*="toc"], [class*="table-of-contents"], [id*="toc"]').remove();
+  $('[class*="sidebar"], [class*="menu"]').remove();
+
   const chapters: Chapter[] = [];
 
   $('h1, h2').each((i, el) => {
