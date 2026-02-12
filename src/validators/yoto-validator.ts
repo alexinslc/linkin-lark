@@ -6,7 +6,8 @@ export class YotoValidator {
   static readonly MAX_CARD_SIZE_MB = 500;
   static readonly MAX_TRACKS = 100;
 
-  static readonly CHARS_PER_MINUTE = 150;
+  // Typical speaking rate: 150 words/min * 5 chars/word = 750 chars/min
+  static readonly CHARS_PER_MINUTE = 750;
 
   validateFileSize(audio: ArrayBuffer): void {
     const sizeMB = audio.byteLength / (1024 * 1024);
@@ -17,7 +18,7 @@ export class YotoValidator {
     }
   }
 
-  validateCardCapacity(chapters: Chapter[]): void {
+  validateTrackCount(chapters: Chapter[]): void {
     if (chapters.length > YotoValidator.MAX_TRACKS) {
       throw new Error(
         `Chapter count ${chapters.length} exceeds Yoto limit of ${YotoValidator.MAX_TRACKS} tracks`
@@ -45,12 +46,9 @@ export class YotoValidator {
     return estimatedMB;
   }
 
-  validateEstimatedCardSize(chapters: Chapter[]): void {
+  validateEstimatedCardSize(chapters: Chapter[]): { estimatedMB: number; withinLimit: boolean } {
     const estimatedMB = this.estimateTotalSize(chapters);
-    if (estimatedMB > YotoValidator.MAX_CARD_SIZE_MB) {
-      console.warn(
-        `⚠ Warning: Estimated total size ${estimatedMB.toFixed(0)}MB may exceed Yoto card limit of ${YotoValidator.MAX_CARD_SIZE_MB}MB`
-      );
-    }
+    const withinLimit = estimatedMB <= YotoValidator.MAX_CARD_SIZE_MB;
+    return { estimatedMB, withinLimit };
   }
 }

@@ -103,9 +103,9 @@ function detectHTMLChapters(html: string): Chapter[] {
   }));
 }
 
-function extractContentUntilNext($: cheerio.CheerioAPI, element: any): string {
+function extractContentUntilNext($: cheerio.CheerioAPI, element: cheerio.Element): string {
   const $el = $(element);
-  const tagName = element.tagName;
+  const tagName = 'tagName' in element ? element.tagName : 'div';
   let content = '';
 
   $el.nextUntil(`${tagName}, h1, h2`).each((_, nextEl) => {

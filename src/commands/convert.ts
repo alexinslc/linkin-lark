@@ -25,11 +25,6 @@ export async function convertCommand(
 
     const validator = new YotoValidator();
 
-    spinner.start('Validating Yoto constraints...');
-    validator.validateCardCapacity(result.chapters);
-    validator.validateEstimatedCardSize(result.chapters);
-    spinner.succeed('Yoto constraints validated');
-
     if (options.dryRun) {
       console.log('\nDry run - no conversion performed\n');
       console.log('Chapters detected:');
@@ -41,15 +36,25 @@ export async function convertCommand(
 
       const totalChars = result.chapters.reduce((sum, ch) => sum + ch.content.length, 0);
       const estimatedCost = (totalChars / 1000000) * 30;
-      const estimatedSize = validator.estimateTotalSize(result.chapters);
+      const { estimatedMB, withinLimit } = validator.validateEstimatedCardSize(result.chapters);
       console.log(`\nTotal characters: ${totalChars.toLocaleString()}`);
-      console.log(`Estimated total size: ~${estimatedSize.toFixed(0)}MB`);
+      console.log(`Estimated total size: ~${estimatedMB.toFixed(0)}MB`);
       console.log(`Estimated cost: $${estimatedCost.toFixed(2)} (approximate)`);
 
+      const trackLimitOk = result.chapters.length <= YotoValidator.MAX_TRACKS;
       console.log('\nYoto compliance:');
-      console.log(`  Tracks: ${result.chapters.length}/${YotoValidator.MAX_TRACKS}`);
-      console.log(`  Estimated card size: ${estimatedSize.toFixed(0)}MB/${YotoValidator.MAX_CARD_SIZE_MB}MB`);
+      console.log(`  Tracks: ${result.chapters.length}/${YotoValidator.MAX_TRACKS} ${trackLimitOk ? '✓' : '⚠ EXCEEDS LIMIT'}`);
+      console.log(`  Estimated card size: ${estimatedMB.toFixed(0)}MB/${YotoValidator.MAX_CARD_SIZE_MB}MB ${withinLimit ? '✓' : '⚠ MAY EXCEED LIMIT'}`);
       return;
+    }
+
+    spinner.start('Validating Yoto constraints...');
+    validator.validateTrackCount(result.chapters);
+    const { estimatedMB, withinLimit } = validator.validateEstimatedCardSize(result.chapters);
+    if (withinLimit) {
+      spinner.succeed('Yoto constraints validated');
+    } else {
+      spinner.warn(`Yoto constraints validated (estimated size ${estimatedMB.toFixed(0)}MB may exceed ${YotoValidator.MAX_CARD_SIZE_MB}MB limit)`);
     }
 
     await ensureOutputDir(options.output);
