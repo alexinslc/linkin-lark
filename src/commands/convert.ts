@@ -1,11 +1,15 @@
 import ora from 'ora';
 import { config } from 'dotenv';
+import PQueue from 'p-queue';
 import { parseInput } from '../parsers/parser';
 import { convertToSpeech, getApiKey, getDefaultVoiceId } from '../tts';
 import { saveMp3File, ensureOutputDir } from '../generator';
 import type { ConvertOptions } from '../types';
 
 config();
+
+const ELEVENLABS_MAX_REQUESTS_PER_MINUTE = 50;
+const ELEVENLABS_MIN_INTERVAL = 1200;
 
 export async function convertCommand(
   input: string,
@@ -40,34 +44,45 @@ export async function convertCommand(
 
     const failed: string[] = [];
 
+    const queue = new PQueue({
+      concurrency: 3,
+      interval: ELEVENLABS_MIN_INTERVAL,
+      intervalCap: 1
+    });
+
     for (let i = 0; i < result.chapters.length; i++) {
       const chapter = result.chapters[i];
+      const chapterIndex = i;
       const progress = `${i + 1}/${result.chapters.length}`;
 
-      try {
-        spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
+      queue.add(async () => {
+        try {
+          spinner.start(`Converting chapter ${progress}: ${chapter.title} (${queue.pending} queued)`);
 
-        const ttsResponse = await convertToSpeech(chapter.content, {
-          apiKey,
-          voiceId,
-          modelId: 'eleven_flash_v2_5'
-        });
+          const ttsResponse = await convertToSpeech(chapter.content, {
+            apiKey,
+            voiceId,
+            modelId: 'eleven_flash_v2_5'
+          });
 
-        const filePath = await saveMp3File(
-          ttsResponse.audio,
-          i,
-          result.chapters.length,
-          { outputDir: options.output }
-        );
+          const filePath = await saveMp3File(
+            ttsResponse.audio,
+            chapterIndex,
+            result.chapters.length,
+            { outputDir: options.output }
+          );
 
-        spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
-      } catch (error) {
-        spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`  Error: ${errorMsg}`);
-        failed.push(chapter.title);
-      }
+          spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
+        } catch (error) {
+          spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error(`  Error: ${errorMsg}`);
+          failed.push(chapter.title);
+        }
+      });
     }
+
+    await queue.onIdle();
 
     if (failed.length === 0) {
       console.log(`\n✓ Successfully converted all ${result.chapters.length} chapters to ${options.output}`);
