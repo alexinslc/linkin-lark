@@ -1,13 +1,11 @@
 export interface Chapter {
   title: string;
   content: string;
-  index: number;
 }
 
 export interface ConvertOptions {
   output: string;
   voice?: string;
-  bitrate?: number;
   pagesPerChapter?: number;
   dryRun?: boolean;
 }
@@ -31,5 +29,4 @@ export interface TTSResponse {
 
 export interface GeneratorOptions {
   outputDir: string;
-  bitrate: number;
 }
