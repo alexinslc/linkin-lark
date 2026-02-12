@@ -9,7 +9,7 @@ import type { ConvertOptions } from '../types';
 config();
 
 const ELEVENLABS_MAX_REQUESTS_PER_MINUTE = 50;
-const ELEVENLABS_MIN_INTERVAL = 1200;
+const ELEVENLABS_MIN_INTERVAL = 60_000 / ELEVENLABS_MAX_REQUESTS_PER_MINUTE;
 
 export async function convertCommand(
   input: string,
@@ -57,12 +57,12 @@ export async function convertCommand(
 
       queue.add(async () => {
         try {
-          spinner.start(`Converting chapter ${progress}: ${chapter.title} (${queue.pending} queued)`);
+          console.log(`Converting chapter ${progress}: ${chapter.title} (${queue.size} queued)`);
 
           const ttsResponse = await convertToSpeech(chapter.content, {
             apiKey,
             voiceId,
-            modelId: 'eleven_flash_v2_5'
+            modelId: options.modelId ?? 'eleven_flash_v2_5'
           });
 
           const filePath = await saveMp3File(
@@ -72,9 +72,9 @@ export async function convertCommand(
             { outputDir: options.output }
           );
 
-          spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
+          console.log(`✓ Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
         } catch (error) {
-          spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
+          console.error(`✗ Failed chapter ${progress}: ${chapter.title}`);
           const errorMsg = error instanceof Error ? error.message : String(error);
           console.error(`  Error: ${errorMsg}`);
           failed.push(chapter.title);
