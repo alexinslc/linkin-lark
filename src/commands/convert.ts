@@ -4,6 +4,7 @@ import { parseInput } from '../parsers/parser';
 import { convertToSpeech, getApiKey, getDefaultVoiceId } from '../tts';
 import { saveMp3File, ensureOutputDir } from '../generator';
 import type { ConvertOptions, ConversionResult } from '../types';
+import { StateManager, type ConversionState } from '../services/state-manager';
 
 config();
 
@@ -58,6 +59,47 @@ export async function convertCommand(
 
     await ensureOutputDir(options.output);
 
+    const stateManager = new StateManager();
+    let state: ConversionState | null = null;
+
+    if (!options.force) {
+      state = await stateManager.load(options.output);
+
+      // Validate that state matches current run
+      if (state) {
+        if (state.source !== input || state.totalChapters !== result.chapters.length) {
+          console.warn('\nWarning: Existing state file does not match current input.');
+          console.warn(`  State source: ${state.source}`);
+          console.warn(`  Current input: ${input}`);
+          console.warn(`  State chapters: ${state.totalChapters}, Current: ${result.chapters.length}`);
+          console.warn('Ignoring state. Use --force to explicitly start fresh.\n');
+          state = null;
+        }
+      }
+
+      if (state && !options.resume) {
+        console.log(`\nFound previous conversion state (${state.completedChapters.length}/${state.totalChapters} chapters completed)`);
+        console.log('Use --resume to continue or --force to start fresh\n');
+        if (spinner) spinner.stop();
+        return;
+      }
+
+      if (state && options.resume) {
+        console.log(`\nResuming conversion (${state.completedChapters.length}/${state.totalChapters} chapters already completed)\n`);
+      }
+    }
+
+    if (!state) {
+      state = {
+        source: input,
+        completedChapters: [],
+        failedChapters: [],
+        timestamp: new Date().toISOString(),
+        totalChapters: result.chapters.length
+      };
+      await stateManager.save(state, options.output);
+    }
+
     const conversionResult: ConversionResult = {
       success: true,
       chapters: [],
@@ -71,6 +113,20 @@ export async function convertCommand(
 
     for (const [i, chapter] of result.chapters.entries()) {
       const progress = `${i + 1}/${result.chapters.length}`;
+
+      if (stateManager.shouldSkipChapter(i, state)) {
+        console.log(`Skipping already completed chapter ${progress}: ${chapter.title}`);
+        // Add to conversionResult for JSON mode
+        if (isJsonMode) {
+          conversionResult.chapters.push({
+            index: i,
+            title: chapter.title,
+            characters: chapter.content.length,
+            filePath: `Chapter ${i + 1}.mp3` // Approximate filename
+          });
+        }
+        continue;
+      }
 
       try {
         if (spinner) spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
@@ -88,6 +144,13 @@ export async function convertCommand(
           { outputDir: options.output }
         );
 
+        state.completedChapters.push(i);
+
+        // Remove from failedChapters if it was previously failed (retry success)
+        state.failedChapters = state.failedChapters.filter(f => f.index !== i);
+
+        await stateManager.save(state, options.output);
+
         conversionResult.chapters.push({
           index: i,
           title: chapter.title,
@@ -98,6 +161,19 @@ export async function convertCommand(
         if (spinner) spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
+
+        if (spinner) {
+          spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
+          console.error(`  Error: ${errorMsg}`);
+        }
+
+        state.failedChapters.push({
+          index: i,
+          title: chapter.title,
+          error: errorMsg
+        });
+        await stateManager.save(state, options.output);
+
         conversionResult.success = false;
         conversionResult.chapters.push({
           index: i,
@@ -105,23 +181,22 @@ export async function convertCommand(
           characters: chapter.content.length,
           error: errorMsg
         });
-
-        if (spinner) {
-          spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
-          console.error(`  Error: ${errorMsg}`);
-        }
       }
     }
+
+    const totalCompleted = state.completedChapters.length;
+    const totalFailed = state.failedChapters.length;
 
     if (isJsonMode) {
       console.log(JSON.stringify(conversionResult, null, 2));
     } else {
-      const failed = conversionResult.chapters.filter(ch => ch.error);
-      if (failed.length === 0) {
+      if (totalFailed === 0) {
         console.log(`\n✓ Successfully converted all ${result.chapters.length} chapters to ${options.output}`);
+        await stateManager.clear(options.output);
       } else {
-        console.log(`\n⚠ Converted ${result.chapters.length - failed.length}/${result.chapters.length} chapters`);
-        console.log('Failed chapters:', failed.map(ch => ch.title).join(', '));
+        console.log(`\n⚠ Converted ${totalCompleted}/${result.chapters.length} chapters`);
+        console.log('Failed chapters:', state.failedChapters.map(f => f.title).join(', '));
+        console.log('\nUse --resume to retry failed chapters');
       }
     }
 

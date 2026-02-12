@@ -9,6 +9,8 @@ export interface ConvertOptions {
   pagesPerChapter?: number;
   dryRun?: boolean;
   format?: 'text' | 'json';
+  resume?: boolean;
+  force?: boolean;
 }
 
 export interface TTSOptions {

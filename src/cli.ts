@@ -18,6 +18,8 @@ program
   .option('-p, --pages-per-chapter <number>', 'Pages per chapter for PDFs without TOC', '10')
   .option('--dry-run', 'Preview chapters and cost without conversion')
   .option('-f, --format <type>', 'Output format: text (default) or json', 'text')
+  .option('--resume', 'Resume from previous state')
+  .option('--force', 'Ignore previous state and start fresh')
   .action(convertCommand);
 
 program.parse();
