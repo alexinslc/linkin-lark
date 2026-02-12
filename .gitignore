@@ -36,3 +36,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Plans and documentation drafts
 docs/plans
 docs/brainstorms
+todos
+
+# IDE and local config
+.cursor/
+CLAUDE.md
+
+# Output files from conversions
+output/
