@@ -15,7 +15,6 @@ program
   .argument('<input>', 'URL or PDF file path')
   .option('-o, --output <dir>', 'Output directory', './output')
   .option('-v, --voice <id>', 'ElevenLabs voice ID')
-  .option('-b, --bitrate <kbps>', 'MP3 bitrate in kbps', '128')
   .option('-p, --pages-per-chapter <number>', 'Pages per chapter for PDFs without TOC', '10')
   .option('--dry-run', 'Preview chapters and cost without conversion')
   .action(convertCommand);

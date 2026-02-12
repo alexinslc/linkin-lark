@@ -47,8 +47,7 @@ async function detectPDFChapters(
 
         chapters.push({
           title: item.title,
-          content,
-          index: i
+          content
         });
       }
     }
@@ -63,8 +62,7 @@ async function detectPDFChapters(
 
       chapters.push({
         title: `Pages ${startPage}-${endPage}`,
-        content,
-        index: Math.floor(i / pagesPerChapter)
+        content
       });
     }
   }

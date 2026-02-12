@@ -40,7 +40,7 @@ function detectHTMLChapters(html: string): Chapter[] {
       const title = text.trim();
       const content = extractContentUntilNext($, el);
 
-      chapters.push({ title, content, index: i });
+      chapters.push({ title, content });
     }
   });
 
@@ -49,7 +49,7 @@ function detectHTMLChapters(html: string): Chapter[] {
     const content = mainContent.length ? mainContent.html() || '' : $('body').html() || '';
     const cleanedContent = cleanHTMLContent(content);
 
-    return [{ title: 'Full Book', content: cleanedContent, index: 0 }];
+    return [{ title: 'Full Book', content: cleanedContent }];
   }
 
   return chapters.map(ch => ({

@@ -57,7 +57,7 @@ export async function convertCommand(
           ttsResponse.audio,
           i,
           result.chapters.length,
-          { outputDir: options.output, bitrate: options.bitrate || 128 }
+          { outputDir: options.output }
         );
 
         spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
