@@ -2,9 +2,15 @@
   "name": "linkin-lark",
   "version": "1.0.0",
   "description": "Convert HTML books and PDFs to MP3 audiobooks for Yoto player",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
   "bin": {
     "linkin-lark": "./src/cli.ts"
   },

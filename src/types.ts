@@ -8,6 +8,7 @@ export interface ConvertOptions {
   voice?: string;
   pagesPerChapter?: number;
   dryRun?: boolean;
+  format?: 'text' | 'json';
   resume?: boolean;
   force?: boolean;
 }
@@ -31,4 +32,21 @@ export interface TTSResponse {
 
 export interface GeneratorOptions {
   outputDir: string;
+}
+
+export interface ConversionResult {
+  success: boolean;
+  chapters: {
+    index: number;
+    title: string;
+    characters: number;
+    filePath?: string;
+    error?: string;
+  }[];
+  totalChapters: number;
+  totalCharacters: number;
+  estimatedCost: number;
+  outputDir: string;
+  source: string;
+  type: 'html' | 'pdf';
 }

@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 import { parseInput } from '../parsers/parser';
 import { convertToSpeech, getApiKey, getDefaultVoiceId } from '../tts';
 import { saveMp3File, ensureOutputDir } from '../generator';
-import type { ConvertOptions } from '../types';
+import type { ConvertOptions, ConversionResult } from '../types';
 import { StateManager, type ConversionState } from '../services/state-manager';
 
 config();
@@ -12,30 +12,50 @@ export async function convertCommand(
   input: string,
   options: ConvertOptions
 ): Promise<void> {
-  const spinner = ora('Initializing...').start();
+  const isJsonMode = options.format === 'json';
+  const spinner = isJsonMode ? null : ora('Initializing...').start();
 
   try {
-    const apiKey = getApiKey();
-    const voiceId = options.voice || getDefaultVoiceId();
+    if (spinner) spinner.text = 'Parsing input...';
+    const result = await parseInput(input, options.pagesPerChapter);
 
-    spinner.text = 'Parsing input...';
-    const result = await parseInput(input);
+    const totalChars = result.chapters.reduce((sum, ch) => sum + ch.content.length, 0);
+    const estimatedCost = (totalChars / 1000000) * 30;
 
-    spinner.succeed(`Found ${result.chapters.length} chapters in ${result.type.toUpperCase()}`);
+    if (spinner) spinner.succeed(`Found ${result.chapters.length} chapters in ${result.type.toUpperCase()}`);
 
     if (options.dryRun) {
-      console.log('\nDry run - no conversion performed\n');
-      console.log('Chapters detected:');
-      result.chapters.forEach((ch, i) => {
-        console.log(`  ${i + 1}. ${ch.title} (${ch.content.length} characters)`);
-      });
-
-      const totalChars = result.chapters.reduce((sum, ch) => sum + ch.content.length, 0);
-      const estimatedCost = (totalChars / 1000000) * 30;
-      console.log(`\nTotal characters: ${totalChars.toLocaleString()}`);
-      console.log(`Estimated cost: $${estimatedCost.toFixed(2)} (approximate)`);
+      if (isJsonMode) {
+        const jsonResult: ConversionResult = {
+          success: true,
+          chapters: result.chapters.map((ch, i) => ({
+            index: i,
+            title: ch.title,
+            characters: ch.content.length
+          })),
+          totalChapters: result.chapters.length,
+          totalCharacters: totalChars,
+          estimatedCost,
+          outputDir: options.output,
+          source: result.source,
+          type: result.type
+        };
+        console.log(JSON.stringify(jsonResult, null, 2));
+      } else {
+        console.log('\nDry run - no conversion performed\n');
+        console.log('Chapters detected:');
+        result.chapters.forEach((ch, i) => {
+          console.log(`  ${i + 1}. ${ch.title} (${ch.content.length} characters)`);
+        });
+        console.log(`\nTotal characters: ${totalChars.toLocaleString()}`);
+        console.log(`Estimated cost: $${estimatedCost.toFixed(2)} (approximate)`);
+      }
       return;
     }
+
+    // Only get API key/voice after dry-run check
+    const apiKey = getApiKey();
+    const voiceId = options.voice || getDefaultVoiceId();
 
     await ensureOutputDir(options.output);
 
@@ -60,7 +80,7 @@ export async function convertCommand(
       if (state && !options.resume) {
         console.log(`\nFound previous conversion state (${state.completedChapters.length}/${state.totalChapters} chapters completed)`);
         console.log('Use --resume to continue or --force to start fresh\n');
-        spinner.stop();
+        if (spinner) spinner.stop();
         return;
       }
 
@@ -80,19 +100,36 @@ export async function convertCommand(
       await stateManager.save(state, options.output);
     }
 
-    for (let i = 0; i < result.chapters.length; i++) {
-      const chapter = result.chapters[i];
-      if (!chapter) continue;
+    const conversionResult: ConversionResult = {
+      success: true,
+      chapters: [],
+      totalChapters: result.chapters.length,
+      totalCharacters: totalChars,
+      estimatedCost,
+      outputDir: options.output,
+      source: result.source,
+      type: result.type
+    };
 
+    for (const [i, chapter] of result.chapters.entries()) {
       const progress = `${i + 1}/${result.chapters.length}`;
 
       if (stateManager.shouldSkipChapter(i, state)) {
         console.log(`Skipping already completed chapter ${progress}: ${chapter.title}`);
+        // Add to conversionResult for JSON mode
+        if (isJsonMode) {
+          conversionResult.chapters.push({
+            index: i,
+            title: chapter.title,
+            characters: chapter.content.length,
+            filePath: `Chapter ${i + 1}.mp3` // Approximate filename
+          });
+        }
         continue;
       }
 
       try {
-        spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
+        if (spinner) spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
 
         const ttsResponse = await convertToSpeech(chapter.content, {
           apiKey,
@@ -114,11 +151,21 @@ export async function convertCommand(
 
         await stateManager.save(state, options.output);
 
-        spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
+        conversionResult.chapters.push({
+          index: i,
+          title: chapter.title,
+          characters: ttsResponse.characters,
+          filePath
+        });
+
+        if (spinner) spinner.succeed(`Converted chapter ${progress}: ${chapter.title} → ${filePath}`);
       } catch (error) {
-        spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`  Error: ${errorMsg}`);
+
+        if (spinner) {
+          spinner.fail(`Failed chapter ${progress}: ${chapter.title}`);
+          console.error(`  Error: ${errorMsg}`);
+        }
 
         state.failedChapters.push({
           index: i,
@@ -126,25 +173,52 @@ export async function convertCommand(
           error: errorMsg
         });
         await stateManager.save(state, options.output);
+
+        conversionResult.success = false;
+        conversionResult.chapters.push({
+          index: i,
+          title: chapter.title,
+          characters: chapter.content.length,
+          error: errorMsg
+        });
       }
     }
 
     const totalCompleted = state.completedChapters.length;
     const totalFailed = state.failedChapters.length;
 
-    if (totalFailed === 0) {
-      console.log(`\n✓ Successfully converted all ${result.chapters.length} chapters to ${options.output}`);
-      await stateManager.clear(options.output);
+    if (isJsonMode) {
+      console.log(JSON.stringify(conversionResult, null, 2));
     } else {
-      console.log(`\n⚠ Converted ${totalCompleted}/${result.chapters.length} chapters`);
-      console.log('Failed chapters:', state.failedChapters.map(f => f.title).join(', '));
-      console.log('\nUse --resume to retry failed chapters');
+      if (totalFailed === 0) {
+        console.log(`\n✓ Successfully converted all ${result.chapters.length} chapters to ${options.output}`);
+        await stateManager.clear(options.output);
+      } else {
+        console.log(`\n⚠ Converted ${totalCompleted}/${result.chapters.length} chapters`);
+        console.log('Failed chapters:', state.failedChapters.map(f => f.title).join(', '));
+        console.log('\nUse --resume to retry failed chapters');
+      }
     }
 
   } catch (error) {
-    spinner.fail('Conversion failed');
+    if (spinner) spinner.fail('Conversion failed');
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`\nError: ${errorMsg}`);
+
+    if (isJsonMode) {
+      const errorResult: ConversionResult = {
+        success: false,
+        chapters: [],
+        totalChapters: 0,
+        totalCharacters: 0,
+        estimatedCost: 0,
+        outputDir: options.output,
+        source: input,
+        type: 'html' // Default type, error occurred before type detection
+      };
+      console.log(JSON.stringify(errorResult, null, 2));
+    } else {
+      console.error(`\nError: ${errorMsg}`);
+    }
     process.exit(1);
   }
 }
