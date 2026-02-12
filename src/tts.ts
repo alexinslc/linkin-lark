@@ -1,6 +1,71 @@
 import type { TTSOptions, TTSResponse } from './types';
 
+const MAX_CHARS = 11000;
+
 export async function convertToSpeech(
+  text: string,
+  options: TTSOptions
+): Promise<TTSResponse> {
+  // Single chunk path (fast)
+  if (text.length <= MAX_CHARS) {
+    return convertSingleChunk(text, options);
+  }
+
+  // Multi-chunk path with smart splitting
+  const chunks = splitTextIntoChunks(text, MAX_CHARS);
+  const audioBuffers: ArrayBuffer[] = [];
+
+  for (const chunk of chunks) {
+    const response = await convertSingleChunk(chunk, options);
+    audioBuffers.push(response.audio);
+  }
+
+  // Concatenate MP3 buffers
+  const totalLength = audioBuffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const buf of audioBuffers) {
+    combined.set(new Uint8Array(buf), offset);
+    offset += buf.byteLength;
+  }
+
+  return {
+    audio: combined.buffer,
+    characters: text.length
+  };
+}
+
+function splitTextIntoChunks(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+
+  while (start < text.length) {
+    let end = start + maxChars;
+
+    // Smart boundary detection (prefer sentence/paragraph breaks)
+    if (end < text.length) {
+      const searchEnd = Math.min(end + 100, text.length);
+      const slice = text.substring(start, searchEnd);
+
+      const sentenceEnd = slice.lastIndexOf('. ');
+      const paragraphEnd = slice.lastIndexOf('\n\n');
+
+      if (paragraphEnd > maxChars - 500) {
+        end = start + paragraphEnd;
+      } else if (sentenceEnd > maxChars - 200) {
+        end = start + sentenceEnd + 1;
+      }
+    }
+
+    chunks.push(text.substring(start, end).trim());
+    start = end;
+  }
+
+  return chunks;
+}
+
+async function convertSingleChunk(
   text: string,
   options: TTSOptions
 ): Promise<TTSResponse> {
