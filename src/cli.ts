@@ -20,21 +20,4 @@ program
   .option('--dry-run', 'Preview chapters and cost without conversion')
   .action(convertCommand);
 
-program
-  .command('voices')
-  .description('List available ElevenLabs voices')
-  .action(() => {
-    console.log('Voice listing not yet implemented');
-  });
-
-program
-  .command('config')
-  .description('Manage configuration')
-  .argument('<action>', 'set | get | list')
-  .argument('[key]', 'Configuration key')
-  .argument('[value]', 'Configuration value')
-  .action(() => {
-    console.log('Config management not yet implemented');
-  });
-
 program.parse();
