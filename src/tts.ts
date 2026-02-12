@@ -94,52 +94,84 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
 
 async function convertSingleChunk(
   text: string,
-  options: TTSOptions
+  options: TTSOptions,
+  retries: number = 3
 ): Promise<TTSResponse> {
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${options.voiceId}`,
-    {
-      method: 'POST',
-      headers: {
-        'xi-api-key': options.apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_flash_v2_5',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${options.voiceId}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': options.apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text,
+            model_id: 'eleven_flash_v2_5',
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+            }
+          })
         }
-      })
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        if (response.status === 401) {
+          throw new Error('Invalid ElevenLabs API key. Check ELEVENLABS_API_KEY in .env');
+        }
+
+        if (response.status === 429) {
+          const retryAfter = parseInt(response.headers.get('Retry-After') || '5');
+
+          if (attempt < retries) {
+            const delay = retryAfter * 1000;
+            console.warn(`Rate limited, waiting ${retryAfter}s before retry ${attempt + 1}/${retries}...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error(`Rate limit exceeded. Retry after ${retryAfter} seconds.`);
+        }
+
+        if (response.status >= 500) {
+          if (attempt < retries) {
+            const delay = 2000 * Math.pow(2, attempt);
+            console.warn(`Server error, retrying in ${delay}ms (${attempt + 1}/${retries})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error(`ElevenLabs server error: ${response.statusText}`);
+        }
+
+        throw new Error(`ElevenLabs API error: ${response.statusText}. ${errorText}`);
+      }
+
+      const audio = await response.arrayBuffer();
+
+      return {
+        audio,
+        characters: text.length
+      };
+
+    } catch (error) {
+      if (attempt === retries ||
+          (error instanceof Error &&
+           (error.message.includes('Invalid ElevenLabs API key') ||
+            !error.message.includes('Rate limit') && !error.message.includes('server error')))) {
+        throw error;
+      }
+
+      const delay = 2000 * Math.pow(2, attempt);
+      console.warn(`Request failed, retry ${attempt + 1}/${retries} after ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-
-    if (response.status === 401) {
-      throw new Error('Invalid ElevenLabs API key. Check ELEVENLABS_API_KEY in .env');
-    }
-
-    if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After');
-      throw new Error(`Rate limit exceeded. Retry after ${retryAfter || 'unknown'} seconds.`);
-    }
-
-    if (response.status >= 500) {
-      throw new Error(`ElevenLabs server error: ${response.statusText}`);
-    }
-
-    throw new Error(`ElevenLabs API error: ${response.statusText}. ${errorText}`);
   }
 
-  const audio = await response.arrayBuffer();
-
-  return {
-    audio,
-    characters: text.length
-  };
+  throw new Error('Max retries exceeded');
 }
 
 export function getDefaultVoiceId(): string {

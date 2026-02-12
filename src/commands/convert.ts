@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { parseInput } from '../parsers/parser';
 import { convertToSpeech, getApiKey, getDefaultVoiceId } from '../tts';
 import { saveMp3File, ensureOutputDir } from '../generator';
+import { RateLimiter } from '../services/rate-limiter';
 import type { ConvertOptions } from '../types';
 
 config();
@@ -39,18 +40,26 @@ export async function convertCommand(
     await ensureOutputDir(options.output);
 
     const failed: string[] = [];
+    const rateLimiter = new RateLimiter();
 
     for (let i = 0; i < result.chapters.length; i++) {
       const chapter = result.chapters[i];
+      if (!chapter) continue;
+
       const progress = `${i + 1}/${result.chapters.length}`;
 
       try {
-        spinner.start(`Converting chapter ${progress}: ${chapter.title}`);
+        const queueInfo = rateLimiter.size > 0 || rateLimiter.pending > 0
+          ? ` [Queue: ${rateLimiter.size}, Active: ${rateLimiter.pending}]`
+          : '';
+        spinner.start(`Converting chapter ${progress}: ${chapter.title}${queueInfo}`);
 
-        const ttsResponse = await convertToSpeech(chapter.content, {
-          apiKey,
-          voiceId,
-          modelId: 'eleven_flash_v2_5'
+        const ttsResponse = await rateLimiter.execute(async () => {
+          return convertToSpeech(chapter.content, {
+            apiKey,
+            voiceId,
+            modelId: 'eleven_flash_v2_5'
+          });
         });
 
         const filePath = await saveMp3File(
