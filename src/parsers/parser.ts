@@ -13,7 +13,12 @@ export async function parseInput(input: string): Promise<ParserResult> {
 }
 
 function isURL(input: string): boolean {
-  return input.startsWith('http://') || input.startsWith('https://');
+  try {
+    const url = new URL(input);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 async function isPDFFile(input: string): Promise<boolean> {

@@ -1,15 +1,24 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Chapter, ParserResult } from '../types';
+import { sanitizePDFPath, isPDFFile as validatePDFMagicBytes } from '../validators/path-validator';
 
 export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): Promise<ParserResult> {
-  const file = Bun.file(pdfPath);
+  // Validate and sanitize path
+  const sanitizedPath = sanitizePDFPath(pdfPath);
+
+  const file = Bun.file(sanitizedPath);
 
   if (!await file.exists()) {
-    throw new Error(`PDF file not found: ${pdfPath}`);
+    throw new Error(`PDF file not found: ${sanitizedPath}`);
   }
 
+  // Verify it's actually a PDF by magic bytes
   const dataBuffer = await file.arrayBuffer();
   const uint8Array = new Uint8Array(dataBuffer);
+
+  if (!validatePDFMagicBytes(uint8Array)) {
+    throw new Error('File is not a valid PDF');
+  }
 
   const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
   const pdfDocument = await loadingTask.promise;
@@ -21,7 +30,7 @@ export async function parsePDF(pdfPath: string, pagesPerChapter: number = 10): P
 
   return {
     chapters,
-    source: pdfPath,
+    source: sanitizedPath,
     type: 'pdf'
   };
 }
