@@ -273,7 +273,9 @@ ElevenLabs pricing (as of 2026):
 - Starter: $5/mo, 30k characters
 - Pro: $99/mo, 500k characters
 
-Average book: ~200k characters ≈ $0.15-0.50 depending on tier.
+**Pay-as-you-go rate:** $30 per 1M characters (used for cost estimates)
+
+Average book: ~200k characters ≈ $6.00 at pay-as-you-go rate, or included in subscription tiers.
 
 **Cost preview:** Normal conversions automatically display cost estimates and require `--yes` flag to proceed. Use `--dry-run` to preview costs without confirmation prompts.
 

@@ -88,48 +88,6 @@ export async function convertCommand(
 
     if (spinner) spinner.succeed(`Found ${result.chapters.length} chapters in ${result.type.toUpperCase()}`);
 
-    // Calculate cost for display (handles resume mode)
-    let displayChars = totalChars;
-    let displayCost = estimatedCost;
-    let displayMode: 'normal' | 'resume' = 'normal';
-    let completedCount = 0;
-
-    // Load state early to calculate remaining cost for resume mode
-    if (!options.force && !options.dryRun) {
-      const stateManager = new StateManager();
-      const state = await stateManager.load(options.output);
-
-      if (state && state.source === input && state.totalChapters === result.chapters.length) {
-        // Calculate remaining cost
-        const remainingChapters = result.chapters.filter((_, i) =>
-          !state.completedChapters.includes(i)
-        );
-        displayChars = remainingChapters.reduce((sum, ch) => sum + ch.content.length, 0);
-        displayCost = (displayChars / 1000000) * 30;
-        completedCount = state.completedChapters.length;
-        displayMode = 'resume';
-      }
-    }
-
-    // Display cost summary (skip in JSON mode - cost is in result)
-    if (!isJsonMode && !options.dryRun) {
-      displayCostSummary(result.chapters.length, displayChars, displayCost, displayMode, completedCount);
-    }
-
-    // Check if confirmation needed
-    // JSON mode auto-confirms, dry-run doesn't need confirmation
-    const needsConfirmation = !options.yes && !options.dryRun && !isJsonMode;
-
-    if (needsConfirmation) {
-      console.log('⚠  To proceed with conversion, add the --yes flag:');
-      console.log(`   linkin-lark convert "${input}" --yes`);
-      if (displayMode === 'resume') {
-        console.log(`   Or with resume: linkin-lark convert "${input}" --resume --yes`);
-      }
-      console.log('\n💡 Tip: Use --dry-run to preview without converting\n');
-      return; // Graceful exit, exit code 0
-    }
-
     if (options.dryRun) {
       if (isJsonMode) {
         const jsonResult: ConversionResult = {
@@ -204,6 +162,43 @@ export async function convertCommand(
         totalChapters: result.chapters.length
       };
       await stateManager.save(state, options.output);
+    }
+
+    // Calculate cost for display (only show resume mode when --resume is used)
+    let displayChars = totalChars;
+    let displayCost = estimatedCost;
+    let displayMode: 'normal' | 'resume' = 'normal';
+    let completedCount = 0;
+
+    if (options.resume && state.completedChapters.length > 0) {
+      // Use Set for O(1) lookup performance
+      const completedChaptersSet = new Set(state.completedChapters);
+      const remainingChapters = result.chapters.filter((_, i) =>
+        !completedChaptersSet.has(i)
+      );
+      displayChars = remainingChapters.reduce((sum, ch) => sum + ch.content.length, 0);
+      displayCost = (displayChars / 1000000) * 30;
+      completedCount = state.completedChapters.length;
+      displayMode = 'resume';
+    }
+
+    // Display cost summary (skip in JSON mode - cost is in result)
+    if (!isJsonMode) {
+      displayCostSummary(result.chapters.length, displayChars, displayCost, displayMode, completedCount);
+    }
+
+    // Check if confirmation needed (after state handling)
+    // JSON mode auto-confirms, dry-run doesn't need confirmation
+    const needsConfirmation = !options.yes && !isJsonMode;
+
+    if (needsConfirmation) {
+      console.log('⚠  To proceed with conversion, add the --yes flag:');
+      console.log(`   linkin-lark convert "${input}" --yes`);
+      if (options.resume) {
+        console.log(`   With resume: linkin-lark convert "${input}" --resume --yes`);
+      }
+      console.log('\n💡 Tip: Use --dry-run to preview without converting\n');
+      return; // Graceful exit, exit code 0
     }
 
     const conversionResult: ConversionResult = {
