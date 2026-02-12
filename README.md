@@ -45,7 +45,9 @@ Get your API key from: https://elevenlabs.io/
 
 ## Usage
 
-### Convert HTML Book
+### CLI Usage
+
+#### Convert HTML Book
 
 ```bash
 bun run src/cli.ts convert https://basecamp.com/shapeup
@@ -73,11 +75,88 @@ bun run src/cli.ts convert book.pdf --bitrate 192
 bun run src/cli.ts convert book.pdf --pages-per-chapter 15
 ```
 
-### Dry Run (Preview Only)
+#### Dry Run (Preview Only)
 
 ```bash
 # See chapter structure and cost estimate without converting
 bun run src/cli.ts convert https://basecamp.com/shapeup --dry-run
+```
+
+#### JSON Output Mode
+
+```bash
+# Get structured JSON output for programmatic parsing
+bun run src/cli.ts convert https://basecamp.com/shapeup --format json
+
+# Dry run with JSON output
+bun run src/cli.ts convert book.pdf --dry-run --format json
+```
+
+### Library Usage
+
+You can import and use linkin-lark programmatically in your TypeScript/JavaScript applications:
+
+```typescript
+import { parseInput, convertToSpeech, saveMp3File, ensureOutputDir } from 'linkin-lark';
+
+async function convertBook() {
+  const input = 'https://example.com/book';
+  const outputDir = './output';
+
+  await ensureOutputDir(outputDir);
+
+  const result = await parseInput(input);
+  console.log(`Parsed ${result.chapters.length} chapters from ${result.source}`);
+
+  for (let i = 0; i < result.chapters.length; i++) {
+    const chapter = result.chapters[i];
+
+    const audio = await convertToSpeech(chapter.content, {
+      apiKey: process.env.ELEVENLABS_API_KEY!,
+      voiceId: process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
+    });
+
+    console.log(`Chapter ${i + 1}: ${audio.characters} characters`);
+
+    const filePath = await saveMp3File(
+      audio.audio,
+      i,
+      result.chapters.length,
+      { outputDir }
+    );
+
+    console.log(`Saved: ${filePath}`);
+  }
+}
+
+convertBook().catch(console.error);
+```
+
+#### Available Exports
+
+```typescript
+// Types
+import type {
+  Chapter,
+  ConvertOptions,
+  TTSOptions,
+  ParserResult,
+  TTSResponse,
+  GeneratorOptions,
+  ConversionResult
+} from 'linkin-lark';
+
+// Parsing
+import { parseInput } from 'linkin-lark';
+
+// Text-to-Speech
+import { convertToSpeech, getApiKey, getDefaultVoiceId } from 'linkin-lark';
+
+// File Generation
+import { saveMp3File, generateFileName, ensureOutputDir } from 'linkin-lark';
+
+// HTML Cleaning
+import { cleanHTMLContent } from 'linkin-lark';
 ```
 
 ## Yoto Compatibility
