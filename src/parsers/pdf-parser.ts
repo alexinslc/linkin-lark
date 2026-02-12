@@ -99,7 +99,7 @@ async function getPageNumber(pdfDocument: PDFDocumentProxy, dest: string | reado
   try {
     if (typeof dest === 'string') {
       const match = dest.match(/p(\d+)/);
-      if (match) {
+      if (match && match[1]) {
         return parseInt(match[1], 10);
       }
     }
