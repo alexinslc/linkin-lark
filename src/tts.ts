@@ -51,6 +51,16 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
   while (start < text.length) {
     let end = start + maxChars;
 
+<<<<<<< HEAD
+    // Smart boundary detection (prefer sentence/paragraph breaks)
+    if (end < text.length) {
+      const searchEnd = Math.min(end + 100, text.length);
+      const slice = text.substring(start, searchEnd);
+
+      const sentenceEnd = slice.lastIndexOf('. ');
+      const paragraphEnd = slice.lastIndexOf('\n\n');
+
+=======
     // Find optimal split point: prefer paragraph breaks, then sentence breaks
     // Searches forward up to 500 chars to find natural boundaries
     if (end < text.length) {
@@ -67,6 +77,7 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       const paragraphEnd = slice.lastIndexOf('\n\n');
 
       // Prefer boundaries closest to the limit, within tolerance range
+>>>>>>> origin/main
       if (paragraphEnd > maxChars - 500) {
         end = start + paragraphEnd;
       } else if (sentenceEnd > maxChars - 200) {
@@ -74,6 +85,9 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       }
     }
 
+<<<<<<< HEAD
+    chunks.push(text.substring(start, end).trim());
+=======
     const chunk = text.substring(start, end);
 
     // Only trim first chunk's start and last chunk's end to preserve internal whitespace
@@ -86,6 +100,7 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       chunks.push(trimmedChunk);
     }
 
+>>>>>>> origin/main
     start = end;
   }
 
